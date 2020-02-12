@@ -31,3 +31,8 @@ else:
     print("No database specified")    
     
 ```    
+
+Dependencies:
+
+Using 'spec-file.txt' or 'environment.yml' one can recreate a conda environment with all necessary packages to run this code (for example in the spyder editor). This spec-file is for windows, but all necessary packages can also be installed manually on linux systems. See https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
+
