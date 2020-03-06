@@ -18,23 +18,23 @@ Using 'spec-file.txt' or 'environment.yml' one can recreate a conda environment 
 An example script to scrape the computer science arXiv and to implement the systematic search defined in the file "regex_helper.py" from this repository is given below:
 
 ```python
-from SystematicSearcher import *
+import SystematicSearcher as sysearch
 
 database = "arxiv"#define which database to search
 
 if database=='dblp':  
     print("Dealing with DBLP data")
-    read_dblp()#read the dblp export dump###NB: if you want to search the dblp, please download the database and its dtd file and unzip it in your working directory: https://dblp.uni-trier.de/faq/How+can+I+download+the+whole+dblp+dataset
-    my_df = load_pickled_db('dblp.pickle')#25 45 secs
+    sysearch.read_dblp()#read the dblp export dump###NB: if you want to search the dblp, please download the database and its dtd file and unzip it in your working directory: https://dblp.uni-trier.de/faq/How+can+I+download+the+whole+dblp+dataset
+    my_df = sysearch.load_pickled_db('dblp.pickle')#25 45 secs
     print('Selected database contains the following (searchable) fields: {}'.format(my_df.columns))
-    search_df(my_df, field='Title')#dblp has only titles unfortunately#search the specified fild with the pre-defined systematic search and save results to spreadsheet
+    sysearch.search_df(my_df, field='Title')#dblp has only titles unfortunately#search the specified fild with the pre-defined systematic search and save results to spreadsheet
     
 elif database == "arxiv":
     print("Dealing with arxiv data")
-    read_arxiv(begin_scraping = '2020-02-02')#reading the local arxiv data. if there is no data, it scrapes it from arxiv api  
-    my_df = load_pickled_db('arxiv.pickle')
+    sysearch.read_arxiv(begin_scraping = '2020-02-02')#reading the local arxiv data. if there is no data, it scrapes it from arxiv api  
+    my_df = sysearch.load_pickled_db('arxiv.pickle')
     print('Selected database contains the following (searchable) fields: {}'.format(my_df.columns))
-    search_df(my_df, field='TiAbs')
+    sysearch.search_df(my_df, field='TiAbs')
 else:
     print("No database specified")    
     
