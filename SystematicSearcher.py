@@ -20,10 +20,15 @@ from lxml.etree import tostring
 from itertools import chain
 
 import scrape as arxivscraper#import the scrape script from the local directory (make sure that the file is present!)
+from RISparser import readris#for validation only##attribute!
+from RISparser.config import TAG_KEY_MAPPING
 
-from regex_helper import cluster_1, cluster_2, cluster_NOT
+from regex_helper import cluster_1, cluster_2, cluster_NOT_titles, cluster_NOT_abstracts
+
     
 random.seed( 30 )
+
+
 
 def scrape_arxiv(start='2005-01-01', arxiv_repo="cs"):
     
@@ -48,8 +53,8 @@ def scrape_arxiv(start='2005-01-01', arxiv_repo="cs"):
     print('Done scraping arxiv from {}, found {} records'.format(start, df.shape[0]))
     
     
-    df.to_pickle('arxiv-dump.pkl')
-    df.to_csv('arxiv-dump.csv')#note that the IDs are automatically converted to floats, which means that leading or trailing zeros are removed. This does not happen when pickeling, pls use pickle file if IDs are of interest
+    df.to_pickle('data/arxiv-dump.pkl')
+    df.to_csv('data/arxiv-dump.csv')#note that the IDs are automatically converted to floats, which means that leading or trailing zeros are removed. This does not happen when pickeling, pls use pickle file if IDs are of interest
 
 def read_dblp():
     #
@@ -61,16 +66,19 @@ def read_dblp():
     #Method needs to be run only once for each dump, as it takes a long time. A pickle file will be exported in the end, and all subsequent methods will simply use this pickle file
     
     frac = 0.05#ony for testing, uncomment manually below if needed
-    if os.path. exists("dblp.xml"):
+    if os.path.exists("data/dblp.xml"):
+        print("success")
+
+    if os.path.exists("data/dblp.xml"):
         pass
     else:
         print("File dblp.xml not found in current directory. Please download it (and dblp.dtd) from University of Trier: https://dblp.uni-trier.de/faq/How+can+I+download+the+whole+dblp+dataset")
         return
     
-    dtd = ET.DTD("dblp.dtd") #pylint: disable=E1101
+    dtd = ET.DTD("data/dblp.dtd") #pylint: disable=E1101
     
     # get an iterable
-    context = ET.iterparse("dblp.xml", events=('start', 'end'), load_dtd=True, #pylint: disable=E1101
+    context = ET.iterparse("data/dblp.xml", events=('start', 'end'), load_dtd=True, #pylint: disable=E1101
         resolve_entities=True) 
     
     
@@ -95,6 +103,7 @@ def read_dblp():
     IDs=[]
     dates=[]
     dois=[]
+    authors=[]
     no_yr = 0
     no_ttl = 0
     
@@ -177,11 +186,14 @@ def read_dblp():
                     dates.append(date)
                     
                     
-        #
-        #        pub_authors = []
-        #        for author in elem.findall('author'):
-        #            if author.text is not None:
-        #                pub_authors.append(author.text)
+
+                    pub_authors = []
+                    for author in elem.findall('author'):
+                        if author.text is not None:
+                            pub_authors.append(author.text)
+                    authors.append("; ".join(pub_authors))
+
+
         
                 
     
@@ -195,11 +207,32 @@ def read_dblp():
     print("No. dates: {}".format(len(dates)))
     print("No. IDs: {}".format(len(IDs)))
     print("No. DOIs: {}".format(len(dois)))
+    print("No. authors: {}".format(len(authors)))
     
     print("No title: {}, No Year: {}".format(no_ttl, no_yr))
+    doi=[]
+
+    for d in dois:#need to clean links to get doi
+        if "; " not in d:
+            if "https://doi.org/" in d:#only 1 entry
+                d = d.replace("https://doi.org/", "")
+                doi.append(d)
+            else:
+                doi.append("")
+        else:#there is a list of links
+            #print(d)
+            result=""
+            for x in d.split(" ; "):
+                if "https://doi.org/" in x:#try to squeeze doi from every link
+                    result = x.replace("https://doi.org/", "")
+            #print(result)
+            doi.append(result)#appen the retrieved doi, or empty string if none found
+
+
+
     
-    df = pd.DataFrame(list(zip(IDs, titles, dois ,years, dates)), 
-                   columns =['ID', 'Title','DOIs', 'Year', 'Date']) 
+    df = pd.DataFrame(list(zip(IDs, titles, dois , doi,authors, years, dates)),
+                   columns =['ID', 'Title','DOI_link',"DOI","Authors", 'Year', 'Date'])
     
     #####################################some processing
     dates=df["Date"].tolist()#get list
@@ -211,7 +244,7 @@ def read_dblp():
     
     #####################################saving the df
     
-    df.to_pickle('dblp.pickle')
+    df.to_pickle('data/dblp.pickle')
     
     #print(df.head())
     
@@ -223,14 +256,14 @@ def read_arxiv(begin_scraping = '2020-02-10', arxiv_repo="cs"):
     #
     #The scrape will be saved in the local working directory
     
-    if os.path. exists('arxiv-dump.pkl'):
-        df = pd.read_pickle('arxiv-dump.pkl')
+    if os.path. exists('data/arxiv-dump.pkl'):
+        df = pd.read_pickle('data/arxiv-dump.pkl')
     else:
         #begin_scraping = '2005-01-01'
         #10th of feb 2020!
         print("No local arxiv dump found. Scraping publications from date: "+ begin_scraping + ". Scraping arXiv repository: "+ arxiv_repo)
         scrape_arxiv(start= begin_scraping, arxiv_repo="cs")#scrapes all records that were published or changed after set start date. 
-        df = pd.read_pickle('arxiv-dump.pkl')
+        df = pd.read_pickle('data/arxiv-dump.pkl')
         
     
     
@@ -245,7 +278,7 @@ def read_arxiv(begin_scraping = '2020-02-10', arxiv_repo="cs"):
     
     #print('DF shape: {}. Dates length: {}'.format(df.shape, len(new_dates)))
     #print(df['Date_Float'])
-    df.to_pickle('arxiv.pickle')
+    df.to_pickle('data/arxiv.pickle')
     
     
 def load_pickled_db(db_fname="dblp.pickle"):
@@ -258,10 +291,10 @@ def load_pickled_db(db_fname="dblp.pickle"):
     
     return df
 
-def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
+def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs", name=""):
     #
     #Method that implements the systematic search. Parameters define restrictions for the publication date. These have to be givin in Float form as above.
-    #field parameter defines which variables will be searched. TiAbs is a concattenation of titles and abstracts, and can be searched for example with data from the arxiv, but not dblp as dblp onlt stores titles
+    #"field" parameter defines which variables will be searched. TiAbs is a concattenation of titles and abstracts, and can be searched for example with data from the arxiv, but not dblp as dblp onlt stores titles
     #
     #
     
@@ -277,7 +310,7 @@ def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
         df = df[ (df['Date_Float'] >= date_min) & (df['Date_Float'] <= date_max) ]#retain only date values, publication year is not available per se in in arxiv dump
     df_copy.drop(df.index, inplace = True)
     
-    df_copy.to_csv("excluded_dates.csv")
+    #df_copy.to_csv("excluded_dates.csv")
     print('Droppped {} abstracts out of {} due to publication date constraints.\nTotal number of entries to search now: {}'.format(num_old-df.shape[0],num_old, df.shape[0]))
     
     ########################################################################Drop by excluded expressions###
@@ -285,27 +318,42 @@ def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
     #comment this code if you dont want the "NOT" search
     num_old= df.shape[0]
  	
-    def regex_filter(val):
-        if val:
+    def regex_filter_titles(val):
+        #if val:
             #print(type(val))
-            for reg in cluster_NOT:
+            for reg in cluster_NOT_titles:
                 res = re.search(reg,val.strip())#get rid of genetics related search results
                 if res:
                     #print(val)
                     return False#found bad string
             
             return True#keep entry becasue NOT search did not find a 'forbidden' string 
-        else:
-            print("Val is empty: {}".format(val))
-            return False
+    def regex_filter_abstracts(val):
+        #if val:
+            #print(type(val))
+            for reg in cluster_NOT_abstracts:
+                res = re.search(reg,val.strip())#get rid of genetics related search results
+                if res:
+                    #print(val)
+                    return False#found bad string
+            
+            return True#keep entry becasue NOT search did not find a 'forbidden' string     
+        #else:
+            #print("Title is empty: {}".format(val))
+            #return False
         
     df_copy = df.copy()
     
-    df = df[df[field].apply(regex_filter)]
+    if "Title" in df.columns:
+        df = df[df["Title"].apply(regex_filter_titles)]
+        print("    ...excluding titles...")
+    if "Abstract" in df.columns:   
+        df = df[df["Abstract"].apply(regex_filter_abstracts)]
+        print("    ...excluding abstracts...")
     
     df_copy.drop(df.index, inplace = True)
-    print("Dropped {} records via the NOT search.\nCurrent nr. of records: {}".format(df_copy.shape[0],df.shape[0]))
-    df_copy.to_csv("excluded_via_NOT-search.csv")
+    print("Dropped {} records via the NOT search in titles/abstracts.\nCurrent nr. of records: {}".format(df_copy.shape[0],df.shape[0]))
+    #df_copy.to_csv("excluded_via_NOT-search.csv")
     
     #####################################################################################################################
     #Systematic search: search using your regex clusters from file regex_helper.py
@@ -314,12 +362,13 @@ def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
     print("Searching {} records via the systematic regex search.".format(df.shape[0]))
     df_copy = df.copy()
     
-    def regex_filter_c1(val):
+    def regex_filter_c1(val):#filter for cluster 1. Returns True as soon as the first regex matches. If there is no match then the function returns a False, leading the record to be dropped
         
         found = False
         
         for reg in cluster_1:
-            result = re.search(reg, val.strip())
+            
+            result = re.search(reg, val.strip(), re.IGNORECASE)
             if result:
                 found= True
                 #print("Found: {}\n Pattern: {}".format(val, reg))
@@ -328,13 +377,15 @@ def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
         if found:
             return True
         else:
+            #print(val.strip())
+            #print("------------")
             return False
         
         
-    df = df[df[field].apply(regex_filter_c1)]    
+    df = df[df[field].apply(regex_filter_c1)]#apply function defined above    
     df_copy.drop(df.index, inplace = True)
     print("Dropped {} records via the first search cluster.\nCurrent nr. of records: {}".format(df_copy.shape[0],df.shape[0]))
-    
+    #df_copy.to_csv("excluded_first.csv")
     #################################################Search each cluster: second cluster of terms
     df_copy = df.copy()
     def regex_filter_c2(val):
@@ -357,13 +408,46 @@ def search_df(df, date_max=2020.03, date_min=2005.00, field="TiAbs"):
     df = df[df[field].apply(regex_filter_c2)]    
     df_copy.drop(df.index, inplace = True)
     print("Dropped {} records via the second search cluster.\nCurrent nr. of records: {}.\nWriting results to disk.".format(df_copy.shape[0],df.shape[0]))
+    #df_copy.to_csv("excluded_second.csv")
     ##################
     #Add code for a third - nth cluster if needed. 
     
     
     ###############################save results
-    df.to_csv("results.csv")
+    df.to_csv("data/results_{}.csv".format(name))
     
     
     
+def validate(path):
+    print("Validating on the basis of data from: "+ path)
+    with open(path) as fp:
+        entries = list(readris(fp))
+        
+        
     
+    titles = [entry['primary_title'] if 'primary_title' in entry else "" for entry in entries ]    
+    #print(len(titles))
+    
+    abstracts = [entry['abstract'] if 'abstract' in entry else "" for entry in entries ]    
+    #print(len(abstracts))
+    
+    keywords = [" ".join(entry['keywords']) if 'keywords' in entry else "" for entry in entries ]#joining so that list becomes sentence    
+    
+    IDs= [entry['id'] if 'id' in entry else "" for entry in entries ]
+    #print(len(keywords))
+    
+    Date_Float = [float(entry['publication_year'].replace("//","")) if 'publication_year' in entry else "2020" for entry in entries ]
+    #print(len(Date_Float))
+    
+    ti_abs_kw = [entry[0] + " " + entry[1] + " " + entry[2] for entry in zip(titles, abstracts, keywords)]#make tiabs as searchable entity
+    
+    #print(keywords[1])
+    df = pd.DataFrame(list(zip(IDs, titles, Date_Float, abstracts, keywords, ti_abs_kw)), 
+                   columns =['ID', 'Title', 'Date_Float', 'Abstract', "Keywords", "tiAbsKw"]) 
+    
+    print("Validating {} search results...".format(len(titles)))
+    search_df(df, date_max=2020.03, date_min=2005.00, field="tiAbsKw")
+
+
+
+#validate("C:\\Users\\xf18155\\OneDrive - University of Bristol\\MyFiles-Migrated\\Documents\\SR automation review\\Search\\ris (6).ris")    
